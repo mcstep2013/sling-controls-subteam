@@ -1,0 +1,90 @@
+clear;
+clc;
+format long;
+
+% MOMENT OF INERTIA FUNCTIONS ---------------------------------------------
+
+% Moment of inertia
+function I = I_func(t)
+    M_cw = 50000;        % mass of countermass
+    M_pay = 1000;        % mass of payload
+    density = 1;         % linear density of cable (mass/length)
+    lengthTotal = 1000;  % total length of cable
+    r_cw = 1;            % radius of countermass
+    r_pay = 1;           % radius of payload
+
+    r = 10; % radius from countermass to center of mass
+
+    % total mass of system
+    M_tot = M_cw + M_pay + density*lengthTotal;
+
+    % Length of spooled out cable (r+R)
+    R_tot = (-M_pay + sqrt(M_pay^2 + 2*density*M_tot*r))/density;
+
+    % Counterweight MOI
+    I_cw = (4/3)*(M_cw + density*(lengthTotal - R_tot))*r_cw^2;
+
+    % Extended wire MOI
+    I_wire = (1/3)*density*R_tot.^3;
+
+    % Payload MOI
+    I_pay = M_pay*R_tot.^2 + (4/3)*M_pay*r_pay^2;
+
+    % Total MOI about center of mass
+    I = I_cw + I_wire + I_pay - M_tot*r.^2;
+end
+
+% Derivative of MOI using finite difference
+function dI = dI_fun(t)
+    dt = 1e-5;
+    dI = (I_func(t+dt) - I_func(t-dt)) / (2 * dt);
+end
+
+% KINEMATICS --------------------------------------------------------------
+L = 1e10; % Angular Momentum
+% ΔL = T*Δt = I*Δw  % To determine change in Angular Momentum for future models
+
+t_span = linspace(0, 100, 1000); % Time Span
+initial_state = [0; L / I_func(0)]; % Initial angle and angular velocity
+
+% Set Tolerances
+rel_tol = 1e-3;
+abs_tol = 1e-6;
+ode_opts = odeset('RelTol', rel_tol, 'AbsTol', abs_tol); 
+
+% System of ODEs
+dynamics = @(t, y) [y(2); -(y(2) / I_func(t)) * dI_fun(t)];
+
+% Solve ODE
+[t, state] = ode45(dynamics, t_span, initial_state, ode_opts);
+
+% Bounds Degrees from 0-359
+state(:, 1) = mod(state(:, 1), 360);
+
+% Extract Results
+theta = state(:, 1);  % Angular position (theta)
+omega = state(:, 2);  % Angular velocity (omega)
+alpha = -(omega ./ I_func(t)) .* dI_fun(t);  % Angular acceleration (alpha)
+
+% PLOTS -------------------------------------------------------------------
+figure(1)
+subplot(3,1,1);
+plot(t, theta);
+xlabel('Time');
+ylabel('Angle \theta');
+title('Angle v. Time');
+grid on;
+
+subplot(3,1,2);
+plot(t, omega);
+xlabel('Time');
+ylabel('Angular Velocity \omega');
+title('Angular Velocity v. Time');
+grid on;
+
+subplot(3,1,3);
+plot(t, alpha);
+xlabel('Time');
+ylabel('Angular Acceleration \alpha');
+title('Angular Acceleration v. Time');
+grid on;
